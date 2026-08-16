@@ -20,6 +20,7 @@ import {
   ImageIcon,
   Copy,
   Check,
+  Play,
 } from "lucide-react";
 import { projects } from "@/lib/projects";
 
@@ -67,14 +68,14 @@ const videoModules = [
   {
     title: "AME",
     description: "Motion piece exploring pacing, atmosphere, and visual rhythm.",
-    href: "/video/AME.mp4",
+    href: "https://media.githubusercontent.com/media/rrrzihan/my-protfolio/main/public/video/AME.mp4",
     cover: "/video/ame-cover.png",
     accent: "pink",
   },
   {
     title: "Lemon",
     description: "Short-form video experiment with narrative tone and color.",
-    href: "/video/Lemon.mp4",
+    href: "https://media.githubusercontent.com/media/rrrzihan/my-protfolio/main/public/video/Lemon.mp4",
     cover: "/video/lemon-cover.png",
     accent: "amber",
   },
@@ -85,20 +86,62 @@ export default function Home() {
   const [ucsOpen, setUcsOpen] = useState(false);
   const [yplOpen, setYplOpen] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
+  const [activeVideo, setActiveVideo] = useState<{
+    title: string;
+    src: string;
+  } | null>(null);
   const [copiedField, setCopiedField] = useState<"phone" | "email" | null>(
     null,
   );
+  const [copyError, setCopyError] = useState(false);
   const contactRef = useRef<HTMLDivElement>(null);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function copyContact(value: string, field: "phone" | "email") {
+    setCopyError(false);
+    let ok = false;
+
     try {
-      await navigator.clipboard.writeText(value);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+        ok = true;
+      }
+    } catch {
+      ok = false;
+    }
+
+    if (!ok) {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.top = "0";
+        textarea.style.left = "0";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, value.length);
+        ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } catch {
+        ok = false;
+      }
+    }
+
+    if (ok) {
       setCopiedField(field);
       if (copyResetRef.current) clearTimeout(copyResetRef.current);
-      copyResetRef.current = setTimeout(() => setCopiedField(null), 1600);
-    } catch {
+      copyResetRef.current = setTimeout(() => {
+        setCopiedField(null);
+        setCopyError(false);
+      }, 1600);
+    } else {
       setCopiedField(null);
+      setCopyError(true);
+      if (copyResetRef.current) clearTimeout(copyResetRef.current);
+      copyResetRef.current = setTimeout(() => setCopyError(false), 2000);
     }
   }
 
@@ -124,6 +167,7 @@ export default function Home() {
         setUcsOpen(false);
         setYplOpen(false);
         setVideoOpen(false);
+        setActiveVideo(null);
       }
     }
 
@@ -136,13 +180,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!ucsOpen && !yplOpen && !videoOpen) return;
+    if (!ucsOpen && !yplOpen && !videoOpen && !activeVideo) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previous;
     };
-  }, [ucsOpen, yplOpen, videoOpen]);
+  }, [ucsOpen, yplOpen, videoOpen, activeVideo]);
 
   return (
     <main className="min-h-screen bg-[#09090b] text-zinc-100 selection:bg-indigo-500 selection:text-white relative overflow-hidden font-sans">
@@ -175,6 +219,11 @@ export default function Home() {
                 <p className="text-[10px] font-mono tracking-wider text-zinc-500 mb-3">
                   GET IN TOUCH
                 </p>
+                {copyError && (
+                  <p className="text-[11px] text-rose-400 mb-2">
+                    Copy failed — please select and copy manually.
+                  </p>
+                )}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <a
@@ -188,7 +237,11 @@ export default function Home() {
                     </a>
                     <button
                       type="button"
-                      onClick={() => copyContact("0411750242", "phone")}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void copyContact("0411750242", "phone");
+                      }}
                       aria-label="Copy phone number"
                       className="shrink-0 w-8 h-8 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
                     >
@@ -211,9 +264,11 @@ export default function Home() {
                     </a>
                     <button
                       type="button"
-                      onClick={() =>
-                        copyContact("shengzihan2022@gmail.com", "email")
-                      }
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void copyContact("shengzihan2022@gmail.com", "email");
+                      }}
                       aria-label="Copy email address"
                       className="shrink-0 w-8 h-8 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
                     >
@@ -730,14 +785,18 @@ export default function Home() {
               <div className="p-5 sm:p-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {videoModules.map((module) => (
-                    <motion.a
+                    <motion.button
                       key={module.title}
-                      href={module.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      type="button"
+                      onClick={() =>
+                        setActiveVideo({
+                          title: module.title,
+                          src: module.href,
+                        })
+                      }
                       whileHover={{ y: -6 }}
                       whileTap={{ scale: 0.98 }}
-                      className={`group relative block rounded-2xl border border-zinc-700/80 bg-zinc-950/60 overflow-hidden shadow-lg shadow-black/30 transition-colors ${
+                      className={`group relative block w-full text-left rounded-2xl border border-zinc-700/80 bg-zinc-950/60 overflow-hidden shadow-lg shadow-black/30 transition-colors ${
                         module.accent === "pink"
                           ? "hover:border-pink-500/40"
                           : "hover:border-amber-500/40"
@@ -752,6 +811,11 @@ export default function Home() {
                           className="object-cover object-center transition-transform duration-500 group-hover:scale-105"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-transparent" />
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          <span className="w-12 h-12 rounded-full bg-black/55 border border-white/20 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+                          </span>
+                        </span>
                         <span className="absolute top-3 right-3 text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded-full bg-black/50 text-white border border-white/20 backdrop-blur-sm">
                           Video
                         </span>
@@ -767,7 +831,7 @@ export default function Home() {
                           >
                             {module.title}
                           </h3>
-                          <ExternalLink
+                          <Play
                             className={`w-4 h-4 text-zinc-500 shrink-0 mt-1 transition-colors ${
                               module.accent === "pink"
                                 ? "group-hover:text-pink-400"
@@ -779,9 +843,69 @@ export default function Home() {
                           {module.description}
                         </p>
                       </div>
-                    </motion.a>
+                    </motion.button>
                   ))}
                 </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Inline video player */}
+      <AnimatePresence>
+        {activeVideo && (
+          <motion.div
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <motion.button
+              type="button"
+              aria-label="Close video"
+              className="absolute inset-0 bg-[#09090b]/80 backdrop-blur-md"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActiveVideo(null)}
+            />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-label={activeVideo.title}
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ type: "spring", stiffness: 280, damping: 28 }}
+              className="relative z-10 w-full max-w-5xl rounded-3xl border border-zinc-700/80 bg-zinc-950 overflow-hidden shadow-2xl shadow-black/50"
+            >
+              <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-zinc-800">
+                <h3 className="text-lg font-bold text-white">
+                  {activeVideo.title}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setActiveVideo(null)}
+                  aria-label="Close"
+                  className="w-10 h-10 rounded-full border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="bg-black aspect-video">
+                <video
+                  key={activeVideo.src}
+                  src={activeVideo.src}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="metadata"
+                  className="w-full h-full"
+                >
+                  Your browser does not support the video tag.
+                </video>
               </div>
             </motion.div>
           </motion.div>
