@@ -18,6 +18,8 @@ import {
   X,
   ExternalLink,
   ImageIcon,
+  Copy,
+  Check,
 } from "lucide-react";
 import { projects } from "@/lib/projects";
 
@@ -83,7 +85,28 @@ export default function Home() {
   const [ucsOpen, setUcsOpen] = useState(false);
   const [yplOpen, setYplOpen] = useState(false);
   const [videoOpen, setVideoOpen] = useState(false);
+  const [copiedField, setCopiedField] = useState<"phone" | "email" | null>(
+    null,
+  );
   const contactRef = useRef<HTMLDivElement>(null);
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function copyContact(value: string, field: "phone" | "email") {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      if (copyResetRef.current) clearTimeout(copyResetRef.current);
+      copyResetRef.current = setTimeout(() => setCopiedField(null), 1600);
+    } catch {
+      setCopiedField(null);
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (copyResetRef.current) clearTimeout(copyResetRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -153,24 +176,54 @@ export default function Home() {
                   GET IN TOUCH
                 </p>
                 <div className="space-y-3">
-                  <a
-                    href="tel:0411750242"
-                    className="flex items-center gap-3 text-sm text-zinc-200 hover:text-white transition-colors group"
-                  >
-                    <span className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center group-hover:border-indigo-500/50 transition-colors">
-                      <Phone className="w-3.5 h-3.5 text-indigo-400" />
-                    </span>
-                    <span className="font-mono">0411750242</span>
-                  </a>
-                  <a
-                    href="mailto:shengzihan2022@gmail.com"
-                    className="flex items-center gap-3 text-sm text-zinc-200 hover:text-white transition-colors group"
-                  >
-                    <span className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center group-hover:border-indigo-500/50 transition-colors">
-                      <Mail className="w-3.5 h-3.5 text-indigo-400" />
-                    </span>
-                    <span className="break-all">shengzihan2022@gmail.com</span>
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href="tel:0411750242"
+                      className="flex min-w-0 flex-1 items-center gap-3 text-sm text-zinc-200 hover:text-white transition-colors group"
+                    >
+                      <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center group-hover:border-indigo-500/50 transition-colors">
+                        <Phone className="w-3.5 h-3.5 text-indigo-400" />
+                      </span>
+                      <span className="font-mono">0411750242</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => copyContact("0411750242", "phone")}
+                      aria-label="Copy phone number"
+                      className="shrink-0 w-8 h-8 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+                    >
+                      {copiedField === "phone" ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href="mailto:shengzihan2022@gmail.com"
+                      className="flex min-w-0 flex-1 items-center gap-3 text-sm text-zinc-200 hover:text-white transition-colors group"
+                    >
+                      <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center group-hover:border-indigo-500/50 transition-colors">
+                        <Mail className="w-3.5 h-3.5 text-indigo-400" />
+                      </span>
+                      <span className="break-all">shengzihan2022@gmail.com</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copyContact("shengzihan2022@gmail.com", "email")
+                      }
+                      aria-label="Copy email address"
+                      className="shrink-0 w-8 h-8 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+                    >
+                      {copiedField === "email" ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             )}
