@@ -93,54 +93,58 @@ export default function Home() {
   const [copiedField, setCopiedField] = useState<"phone" | "email" | null>(
     null,
   );
-  const contactRef = useRef<HTMLDivElement>(null);
+  const [copyHint, setCopyHint] = useState<"phone" | "email" | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function copyContact(
-    value: string,
-    field: "phone" | "email",
-    event: React.MouseEvent | React.PointerEvent,
-  ) {
-    event.preventDefault();
-    event.stopPropagation();
+  function selectField(field: "phone" | "email") {
+    const input =
+      field === "phone" ? phoneInputRef.current : emailInputRef.current;
+    if (!input) return;
+    input.focus({ preventScroll: true });
+    input.select();
+    input.setSelectionRange(0, input.value.length);
+  }
+
+  async function copyContact(value: string, field: "phone" | "email") {
+    setCopyHint(null);
+    selectField(field);
 
     let ok = false;
 
-    // Clipboard API first — no DOM focus steal, won't close the panel.
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(value);
-        ok = true;
-      } catch {
-        ok = false;
-      }
+    // Sync path while the click gesture is still active.
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
     }
 
-    // Fallback: select a hidden input that already lives inside the panel.
     if (!ok) {
-      const input =
-        field === "phone" ? phoneInputRef.current : emailInputRef.current;
-      if (input) {
-        input.value = value;
-        input.focus({ preventScroll: true });
-        input.select();
-        input.setSelectionRange(0, value.length);
-        try {
-          ok = document.execCommand("copy");
-        } catch {
-          ok = false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(value);
+          ok = true;
         }
-        input.blur();
+      } catch {
+        ok = false;
       }
     }
 
     if (ok) {
       setCopiedField(field);
       if (copyResetRef.current) clearTimeout(copyResetRef.current);
-      copyResetRef.current = setTimeout(() => setCopiedField(null), 2000);
+      copyResetRef.current = setTimeout(() => {
+        setCopiedField(null);
+        setCopyHint(null);
+      }, 2200);
+      return;
     }
+
+    // Guaranteed manual path: browser prompt with prefilled text.
+    window.prompt("Copy this contact detail:", value);
+    selectField(field);
+    setCopyHint(field);
   }
 
   useEffect(() => {
@@ -150,32 +154,11 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!contactOpen) return;
-
-    function handlePointerDownOutside(event: PointerEvent) {
-      const target = event.target as Node | null;
-      if (contactRef.current && target && !contactRef.current.contains(target)) {
-        setContactOpen(false);
-        setCopiedField(null);
-      }
-    }
-
-    // Register after this tick so the opening click never closes the panel.
-    const timer = window.setTimeout(() => {
-      document.addEventListener("pointerdown", handlePointerDownOutside);
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener("pointerdown", handlePointerDownOutside);
-    };
-  }, [contactOpen]);
-
-  useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setContactOpen(false);
         setCopiedField(null);
+        setCopyHint(null);
         setUcsOpen(false);
         setYplOpen(false);
         setVideoOpen(false);
@@ -190,13 +173,15 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!ucsOpen && !yplOpen && !videoOpen && !activeVideo) return;
+    if (!ucsOpen && !yplOpen && !videoOpen && !activeVideo && !contactOpen) {
+      return;
+    }
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previous;
     };
-  }, [ucsOpen, yplOpen, videoOpen, activeVideo]);
+  }, [ucsOpen, yplOpen, videoOpen, activeVideo, contactOpen]);
 
   return (
     <main className="min-h-screen bg-[#09090b] text-zinc-100 selection:bg-indigo-500 selection:text-white relative overflow-hidden font-sans">
@@ -207,132 +192,18 @@ export default function Home() {
           <Command className="w-4 h-4 text-indigo-400" />
           <span>PORTFOLIO // 2026</span>
         </div>
-        <div
-          className="relative"
-          ref={contactRef}
-          onPointerDown={(event) => event.stopPropagation()}
+        <button
+          type="button"
+          onClick={() => {
+            setCopiedField(null);
+            setCopyHint(null);
+            setContactOpen(true);
+          }}
+          aria-haspopup="dialog"
+          className="text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-full border border-zinc-700 transition-all flex items-center gap-1"
         >
-          <button
-            type="button"
-            onClick={() =>
-              setContactOpen((open) => {
-                if (open) setCopiedField(null);
-                return !open;
-              })
-            }
-            aria-expanded={contactOpen}
-            className="text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-full border border-zinc-700 transition-all flex items-center gap-1"
-          >
-            <Mail className="w-3.5 h-3.5" /> Contact
-          </button>
-
-          <AnimatePresence>
-            {contactOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: -8, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -8, scale: 0.96 }}
-                transition={{ duration: 0.18 }}
-                className="absolute right-0 mt-3 w-80 rounded-2xl border border-zinc-700 bg-zinc-900/95 backdrop-blur-sm shadow-2xl shadow-black/40 p-4 z-50"
-                onPointerDown={(event) => event.stopPropagation()}
-              >
-                <p className="text-[10px] font-mono tracking-wider text-zinc-500 mb-3">
-                  GET IN TOUCH · TAP TO COPY
-                </p>
-
-                {/* Hidden fields used only as copy fallback */}
-                <input
-                  ref={phoneInputRef}
-                  readOnly
-                  tabIndex={-1}
-                  aria-hidden="true"
-                  defaultValue="0411750242"
-                  className="sr-only"
-                />
-                <input
-                  ref={emailInputRef}
-                  readOnly
-                  tabIndex={-1}
-                  aria-hidden="true"
-                  defaultValue="shengzihan2022@gmail.com"
-                  className="sr-only"
-                />
-
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={(event) =>
-                      void copyContact("0411750242", "phone", event)
-                    }
-                    className="w-full flex items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-950/70 hover:bg-zinc-800/80 px-3 py-3 text-left transition-colors"
-                  >
-                    <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-                      <Phone className="w-3.5 h-3.5 text-indigo-400" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[10px] font-mono tracking-wider text-zinc-500">
-                        PHONE
-                      </span>
-                      <span className="block text-sm font-mono text-zinc-100">
-                        0411750242
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-[11px] font-medium text-zinc-400 flex items-center gap-1">
-                      {copiedField === "phone" ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-400">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={(event) =>
-                      void copyContact(
-                        "shengzihan2022@gmail.com",
-                        "email",
-                        event,
-                      )
-                    }
-                    className="w-full flex items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-950/70 hover:bg-zinc-800/80 px-3 py-3 text-left transition-colors"
-                  >
-                    <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center">
-                      <Mail className="w-3.5 h-3.5 text-indigo-400" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[10px] font-mono tracking-wider text-zinc-500">
-                        EMAIL
-                      </span>
-                      <span className="block text-sm text-zinc-100 break-all">
-                        shengzihan2022@gmail.com
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-[11px] font-medium text-zinc-400 flex items-center gap-1">
-                      {copiedField === "email" ? (
-                        <>
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-emerald-400">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </span>
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+          <Mail className="w-3.5 h-3.5" /> Contact
+        </button>
       </nav>
 
       <section className="max-w-6xl mx-auto px-6 pt-12 pb-16 relative z-10">
@@ -496,6 +367,173 @@ export default function Home() {
           })}
         </div>
       </section>
+
+      {/* Contact Modal */}
+      <AnimatePresence>
+        {contactOpen && (
+          <motion.div
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4 sm:p-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <button
+              type="button"
+              aria-label="Close contact"
+              className="absolute inset-0 bg-[#09090b]/80 backdrop-blur-md"
+              onClick={() => {
+                setContactOpen(false);
+                setCopiedField(null);
+                setCopyHint(null);
+              }}
+            />
+
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="contact-modal-title"
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              transition={{ type: "spring", stiffness: 280, damping: 28 }}
+              className="relative z-10 w-full max-w-md rounded-3xl border border-zinc-700/80 bg-zinc-900/95 backdrop-blur-xl shadow-2xl shadow-black/50 p-5 sm:p-6"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4 mb-5">
+                <div>
+                  <p className="text-[10px] font-mono tracking-wider text-indigo-400/80 mb-1">
+                    GET IN TOUCH
+                  </p>
+                  <h2
+                    id="contact-modal-title"
+                    className="text-xl font-bold text-white tracking-tight"
+                  >
+                    Contact
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContactOpen(false);
+                    setCopiedField(null);
+                    setCopyHint(null);
+                  }}
+                  aria-label="Close"
+                  className="shrink-0 w-10 h-10 rounded-full border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <p className="text-sm text-zinc-400 mb-4">
+                Tap Copy, or click the field and use Ctrl/Cmd + C (mobile:
+                long-press).
+              </p>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-zinc-700 bg-zinc-950/70 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Phone className="w-4 h-4 text-indigo-400" />
+                    <span className="text-[10px] font-mono tracking-wider text-zinc-500">
+                      PHONE
+                    </span>
+                  </div>
+                  <input
+                    ref={phoneInputRef}
+                    readOnly
+                    defaultValue="0411750242"
+                    onFocus={(event) => event.currentTarget.select()}
+                    onClick={(event) => event.currentTarget.select()}
+                    className="w-full bg-transparent text-lg font-mono text-white outline-none selection:bg-indigo-500 selection:text-white mb-3"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void copyContact("0411750242", "phone")}
+                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3 py-2.5 text-sm text-zinc-100 transition-colors"
+                    >
+                      {copiedField === "phone" ? (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-400" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copy phone
+                        </>
+                      )}
+                    </button>
+                    <a
+                      href="tel:0411750242"
+                      className="inline-flex items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 px-3 py-2.5 text-sm text-zinc-300 transition-colors"
+                    >
+                      Call
+                    </a>
+                  </div>
+                  {copyHint === "phone" && (
+                    <p className="text-xs text-amber-300 mt-2">
+                      Text is selected — press Ctrl/Cmd + C, or long-press to
+                      copy.
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-zinc-700 bg-zinc-950/70 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Mail className="w-4 h-4 text-indigo-400" />
+                    <span className="text-[10px] font-mono tracking-wider text-zinc-500">
+                      EMAIL
+                    </span>
+                  </div>
+                  <input
+                    ref={emailInputRef}
+                    readOnly
+                    defaultValue="shengzihan2022@gmail.com"
+                    onFocus={(event) => event.currentTarget.select()}
+                    onClick={(event) => event.currentTarget.select()}
+                    className="w-full bg-transparent text-base sm:text-lg text-white outline-none selection:bg-indigo-500 selection:text-white mb-3"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void copyContact("shengzihan2022@gmail.com", "email")
+                      }
+                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 px-3 py-2.5 text-sm text-zinc-100 transition-colors"
+                    >
+                      {copiedField === "email" ? (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-400" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copy email
+                        </>
+                      )}
+                    </button>
+                    <a
+                      href="mailto:shengzihan2022@gmail.com"
+                      className="inline-flex items-center justify-center rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 px-3 py-2.5 text-sm text-zinc-300 transition-colors"
+                    >
+                      Email
+                    </a>
+                  </div>
+                  {copyHint === "email" && (
+                    <p className="text-xs text-amber-300 mt-2">
+                      Text is selected — press Ctrl/Cmd + C, or long-press to
+                      copy.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* UCS Detail Modal */}
       <AnimatePresence>
