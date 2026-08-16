@@ -94,56 +94,45 @@ export default function Home() {
     null,
   );
   const contactRef = useRef<HTMLDivElement>(null);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function copyTextSync(value: string): boolean {
-    const textarea = document.createElement("textarea");
-    textarea.value = value;
-    textarea.setAttribute("readonly", "");
-    textarea.contentEditable = "true";
-    textarea.style.position = "fixed";
-    textarea.style.top = "0";
-    textarea.style.left = "0";
-    textarea.style.width = "1px";
-    textarea.style.height = "1px";
-    textarea.style.padding = "0";
-    textarea.style.border = "none";
-    textarea.style.outline = "none";
-    textarea.style.boxShadow = "none";
-    textarea.style.background = "transparent";
-    textarea.style.opacity = "0";
-    document.body.appendChild(textarea);
-
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(textarea);
-    selection?.removeAllRanges();
-    selection?.addRange(range);
-    textarea.focus();
-    textarea.setSelectionRange(0, value.length);
+  async function copyContact(
+    value: string,
+    field: "phone" | "email",
+    event: React.MouseEvent | React.PointerEvent,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
 
     let ok = false;
-    try {
-      ok = document.execCommand("copy");
-    } catch {
-      ok = false;
-    }
 
-    selection?.removeAllRanges();
-    document.body.removeChild(textarea);
-    return ok;
-  }
-
-  async function copyContact(value: string, field: "phone" | "email") {
-    // Prefer synchronous copy first so mobile browsers keep the user-gesture context.
-    let ok = copyTextSync(value);
-
-    if (!ok && navigator.clipboard?.writeText) {
+    // Clipboard API first — no DOM focus steal, won't close the panel.
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(value);
         ok = true;
       } catch {
         ok = false;
+      }
+    }
+
+    // Fallback: select a hidden input that already lives inside the panel.
+    if (!ok) {
+      const input =
+        field === "phone" ? phoneInputRef.current : emailInputRef.current;
+      if (input) {
+        input.value = value;
+        input.focus({ preventScroll: true });
+        input.select();
+        input.setSelectionRange(0, value.length);
+        try {
+          ok = document.execCommand("copy");
+        } catch {
+          ok = false;
+        }
+        input.blur();
       }
     }
 
@@ -161,18 +150,32 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        contactRef.current &&
-        !contactRef.current.contains(event.target as Node)
-      ) {
+    if (!contactOpen) return;
+
+    function handlePointerDownOutside(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (contactRef.current && target && !contactRef.current.contains(target)) {
         setContactOpen(false);
+        setCopiedField(null);
       }
     }
 
+    // Register after this tick so the opening click never closes the panel.
+    const timer = window.setTimeout(() => {
+      document.addEventListener("pointerdown", handlePointerDownOutside);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("pointerdown", handlePointerDownOutside);
+    };
+  }, [contactOpen]);
+
+  useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setContactOpen(false);
+        setCopiedField(null);
         setUcsOpen(false);
         setYplOpen(false);
         setVideoOpen(false);
@@ -180,10 +183,8 @@ export default function Home() {
       }
     }
 
-    document.addEventListener("click", handleClickOutside);
     document.addEventListener("keydown", handleEscape);
     return () => {
-      document.removeEventListener("click", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
   }, []);
@@ -206,10 +207,19 @@ export default function Home() {
           <Command className="w-4 h-4 text-indigo-400" />
           <span>PORTFOLIO // 2026</span>
         </div>
-        <div className="relative" ref={contactRef}>
+        <div
+          className="relative"
+          ref={contactRef}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
           <button
             type="button"
-            onClick={() => setContactOpen((open) => !open)}
+            onClick={() =>
+              setContactOpen((open) => {
+                if (open) setCopiedField(null);
+                return !open;
+              })
+            }
             aria-expanded={contactOpen}
             className="text-xs font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 rounded-full border border-zinc-700 transition-all flex items-center gap-1"
           >
@@ -224,14 +234,36 @@ export default function Home() {
                 exit={{ opacity: 0, y: -8, scale: 0.96 }}
                 transition={{ duration: 0.18 }}
                 className="absolute right-0 mt-3 w-80 rounded-2xl border border-zinc-700 bg-zinc-900/95 backdrop-blur-sm shadow-2xl shadow-black/40 p-4 z-50"
+                onPointerDown={(event) => event.stopPropagation()}
               >
                 <p className="text-[10px] font-mono tracking-wider text-zinc-500 mb-3">
                   GET IN TOUCH · TAP TO COPY
                 </p>
+
+                {/* Hidden fields used only as copy fallback */}
+                <input
+                  ref={phoneInputRef}
+                  readOnly
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  defaultValue="0411750242"
+                  className="sr-only"
+                />
+                <input
+                  ref={emailInputRef}
+                  readOnly
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  defaultValue="shengzihan2022@gmail.com"
+                  className="sr-only"
+                />
+
                 <div className="space-y-2">
                   <button
                     type="button"
-                    onClick={() => void copyContact("0411750242", "phone")}
+                    onClick={(event) =>
+                      void copyContact("0411750242", "phone", event)
+                    }
                     className="w-full flex items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-950/70 hover:bg-zinc-800/80 px-3 py-3 text-left transition-colors"
                   >
                     <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center">
@@ -262,8 +294,12 @@ export default function Home() {
 
                   <button
                     type="button"
-                    onClick={() =>
-                      void copyContact("shengzihan2022@gmail.com", "email")
+                    onClick={(event) =>
+                      void copyContact(
+                        "shengzihan2022@gmail.com",
+                        "email",
+                        event,
+                      )
                     }
                     className="w-full flex items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-950/70 hover:bg-zinc-800/80 px-3 py-3 text-left transition-colors"
                   >
