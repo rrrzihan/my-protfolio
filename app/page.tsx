@@ -93,38 +93,55 @@ export default function Home() {
   const [copiedField, setCopiedField] = useState<"phone" | "email" | null>(
     null,
   );
-  const [copyError, setCopyError] = useState(false);
   const contactRef = useRef<HTMLDivElement>(null);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function copyContact(value: string, field: "phone" | "email") {
-    setCopyError(false);
-    let ok = false;
+  function copyTextSync(value: string): boolean {
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.contentEditable = "true";
+    textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.left = "0";
+    textarea.style.width = "1px";
+    textarea.style.height = "1px";
+    textarea.style.padding = "0";
+    textarea.style.border = "none";
+    textarea.style.outline = "none";
+    textarea.style.boxShadow = "none";
+    textarea.style.background = "transparent";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
 
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(textarea);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    textarea.focus();
+    textarea.setSelectionRange(0, value.length);
+
+    let ok = false;
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(value);
-        ok = true;
-      }
+      ok = document.execCommand("copy");
     } catch {
       ok = false;
     }
 
-    if (!ok) {
+    selection?.removeAllRanges();
+    document.body.removeChild(textarea);
+    return ok;
+  }
+
+  async function copyContact(value: string, field: "phone" | "email") {
+    // Prefer synchronous copy first so mobile browsers keep the user-gesture context.
+    let ok = copyTextSync(value);
+
+    if (!ok && navigator.clipboard?.writeText) {
       try {
-        const textarea = document.createElement("textarea");
-        textarea.value = value;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "fixed";
-        textarea.style.top = "0";
-        textarea.style.left = "0";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        textarea.setSelectionRange(0, value.length);
-        ok = document.execCommand("copy");
-        document.body.removeChild(textarea);
+        await navigator.clipboard.writeText(value);
+        ok = true;
       } catch {
         ok = false;
       }
@@ -133,15 +150,7 @@ export default function Home() {
     if (ok) {
       setCopiedField(field);
       if (copyResetRef.current) clearTimeout(copyResetRef.current);
-      copyResetRef.current = setTimeout(() => {
-        setCopiedField(null);
-        setCopyError(false);
-      }, 1600);
-    } else {
-      setCopiedField(null);
-      setCopyError(true);
-      if (copyResetRef.current) clearTimeout(copyResetRef.current);
-      copyResetRef.current = setTimeout(() => setCopyError(false), 2000);
+      copyResetRef.current = setTimeout(() => setCopiedField(null), 2000);
     }
   }
 
@@ -171,10 +180,10 @@ export default function Home() {
       }
     }
 
-    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("click", handleClickOutside);
     document.addEventListener("keydown", handleEscape);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("click", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
   }, []);
@@ -214,71 +223,75 @@ export default function Home() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -8, scale: 0.96 }}
                 transition={{ duration: 0.18 }}
-                className="absolute right-0 mt-3 w-72 rounded-2xl border border-zinc-700 bg-zinc-900/95 backdrop-blur-sm shadow-2xl shadow-black/40 p-4 z-50"
+                className="absolute right-0 mt-3 w-80 rounded-2xl border border-zinc-700 bg-zinc-900/95 backdrop-blur-sm shadow-2xl shadow-black/40 p-4 z-50"
               >
                 <p className="text-[10px] font-mono tracking-wider text-zinc-500 mb-3">
-                  GET IN TOUCH
+                  GET IN TOUCH · TAP TO COPY
                 </p>
-                {copyError && (
-                  <p className="text-[11px] text-rose-400 mb-2">
-                    Copy failed — please select and copy manually.
-                  </p>
-                )}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <a
-                      href="tel:0411750242"
-                      className="flex min-w-0 flex-1 items-center gap-3 text-sm text-zinc-200 hover:text-white transition-colors group"
-                    >
-                      <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center group-hover:border-indigo-500/50 transition-colors">
-                        <Phone className="w-3.5 h-3.5 text-indigo-400" />
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => void copyContact("0411750242", "phone")}
+                    className="w-full flex items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-950/70 hover:bg-zinc-800/80 px-3 py-3 text-left transition-colors"
+                  >
+                    <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                      <Phone className="w-3.5 h-3.5 text-indigo-400" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[10px] font-mono tracking-wider text-zinc-500">
+                        PHONE
                       </span>
-                      <span className="font-mono">0411750242</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        void copyContact("0411750242", "phone");
-                      }}
-                      aria-label="Copy phone number"
-                      className="shrink-0 w-8 h-8 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
-                    >
+                      <span className="block text-sm font-mono text-zinc-100">
+                        0411750242
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[11px] font-medium text-zinc-400 flex items-center gap-1">
                       {copiedField === "phone" ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">Copied</span>
+                        </>
                       ) : (
-                        <Copy className="w-3.5 h-3.5" />
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy</span>
+                        </>
                       )}
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href="mailto:shengzihan2022@gmail.com"
-                      className="flex min-w-0 flex-1 items-center gap-3 text-sm text-zinc-200 hover:text-white transition-colors group"
-                    >
-                      <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center group-hover:border-indigo-500/50 transition-colors">
-                        <Mail className="w-3.5 h-3.5 text-indigo-400" />
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void copyContact("shengzihan2022@gmail.com", "email")
+                    }
+                    className="w-full flex items-center gap-3 rounded-xl border border-zinc-700 bg-zinc-950/70 hover:bg-zinc-800/80 px-3 py-3 text-left transition-colors"
+                  >
+                    <span className="w-8 h-8 shrink-0 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center">
+                      <Mail className="w-3.5 h-3.5 text-indigo-400" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[10px] font-mono tracking-wider text-zinc-500">
+                        EMAIL
                       </span>
-                      <span className="break-all">shengzihan2022@gmail.com</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        void copyContact("shengzihan2022@gmail.com", "email");
-                      }}
-                      aria-label="Copy email address"
-                      className="shrink-0 w-8 h-8 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
-                    >
+                      <span className="block text-sm text-zinc-100 break-all">
+                        shengzihan2022@gmail.com
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-[11px] font-medium text-zinc-400 flex items-center gap-1">
                       {copiedField === "email" ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">Copied</span>
+                        </>
                       ) : (
-                        <Copy className="w-3.5 h-3.5" />
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Copy</span>
+                        </>
                       )}
-                    </button>
-                  </div>
+                    </span>
+                  </button>
                 </div>
               </motion.div>
             )}
